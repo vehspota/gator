@@ -10,17 +10,12 @@ import (
 	"github.com/vehspota/gator/internal/database"
 )
 
-func handlerAddFeed(s *state, cmd command) error {
+func handlerAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.args) != 2 {
 		return errors.New("usage: addfeed <name> <url>")
 	}
 	name := cmd.args[0]
 	url := cmd.args[1]
-
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return fmt.Errorf("couldn't get current user: %w", err)
-	}
 
 	now := time.Now().UTC()
 	feed, err := s.db.CreateFeed(context.Background(), database.CreateFeedParams{
