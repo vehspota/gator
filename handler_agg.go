@@ -2,10 +2,15 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/lib/pq"
+	"github.com/vehspota/gator/internal/database"
 )
 
 func handlerAgg(s *state, cmd command) error {
@@ -46,8 +51,47 @@ func scrapeFeeds(s *state) {
 		return
 	}
 
+	saved := 0
 	for _, item := range rssFeed.Channel.Item {
-		fmt.Printf(" * %s\n", item.Title)
+		now := time.Now().UTC()
+		err := s.db.CreatePost(context.Background(), database.CreatePostParams{
+			ID:        uuid.New(),
+			CreatedAt: now,
+			UpdatedAt: now,
+			Title:     item.Title,
+			Url:       item.Link,
+			Description: sql.NullString{
+				String: item.Description,
+				Valid:  item.Description != "",
+			},
+			PublishedAt: parsePubDate(item.PubDate),
+			FeedID:      feed.ID,
+		})
+		if err != nil {
+			var pqErr *pq.Error
+			if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+				continue // post already saved
+			}
+			log.Printf("couldn't save post %q: %v", item.Title, err)
+			continue
+		}
+		saved++
 	}
-	fmt.Printf("Found %d posts in %s\n\n", len(rssFeed.Channel.Item), feed.Name)
+	fmt.Printf("Saved %d new posts from %s\n\n", saved, feed.Name)
+}
+
+func parsePubDate(s string) sql.NullTime {
+	layouts := []string{
+		time.RFC1123Z,
+		time.RFC1123,
+		time.RFC3339,
+		"Mon, 2 Jan 2006 15:04:05 -0700",
+		"Mon, 2 Jan 2006 15:04:05 MST",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return sql.NullTime{Time: t.UTC(), Valid: true}
+		}
+	}
+	return sql.NullTime{}
 }
