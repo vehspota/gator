@@ -1,11 +1,15 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"os"
 
 	"github.com/vehspota/gator/internal/config"
 )
+
+type state struct {
+	cfg *config.Config
+}
 
 func main() {
 	cfg, err := config.Read()
@@ -13,13 +17,23 @@ func main() {
 		log.Fatalf("error reading config: %v", err)
 	}
 
-	if err := cfg.SetUser("ivan"); err != nil {
-		log.Fatalf("error setting user: %v", err)
+	s := &state{cfg: &cfg}
+
+	cmds := commands{
+		handlers: make(map[string]func(*state, command) error),
+	}
+	cmds.register("login", handlerLogin)
+
+	if len(os.Args) < 2 {
+		log.Fatal("not enough arguments provided: usage: gator <command> [args...]")
 	}
 
-	cfg, err = config.Read()
-	if err != nil {
-		log.Fatalf("error reading config: %v", err)
+	cmd := command{
+		name: os.Args[1],
+		args: os.Args[2:],
 	}
-	fmt.Printf("%+v\n", cfg)
+
+	if err := cmds.run(s, cmd); err != nil {
+		log.Fatal(err)
+	}
 }
