@@ -1,13 +1,18 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"os"
 
 	"github.com/vehspota/gator/internal/config"
+	"github.com/vehspota/gator/internal/database"
+
+	_ "github.com/lib/pq"
 )
 
 type state struct {
+	db  *database.Queries
 	cfg *config.Config
 }
 
@@ -17,12 +22,25 @@ func main() {
 		log.Fatalf("error reading config: %v", err)
 	}
 
-	s := &state{cfg: &cfg}
+	dbURL := cfg.DBURL
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatalf("error connecting to db: %v", err)
+	}
+	defer db.Close()
+
+	dbQueries := database.New(db)
+
+	s := &state{
+		db:  dbQueries,
+		cfg: &cfg,
+	}
 
 	cmds := commands{
 		handlers: make(map[string]func(*state, command) error),
 	}
 	cmds.register("login", handlerLogin)
+	cmds.register("register", handlerRegister)
 
 	if len(os.Args) < 2 {
 		log.Fatal("not enough arguments provided: usage: gator <command> [args...]")
